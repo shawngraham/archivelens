@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Book, Quote, Hash, AlignLeft, Maximize2, Minimize2, Edit3, Save, Eye, Layers, ImageIcon, Network, Share2, Target } from 'lucide-react';
+import { Book, Quote, Hash, AlignLeft, Maximize2, Minimize2, Edit3, Save, Eye, Layers, ImageIcon, Network, Share2, Target, BarChart2, TrendingUp, ArrowUpDown } from 'lucide-react';
 import { DataRecord } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -16,6 +16,8 @@ const ReadingRoom: React.FC<Props> = ({ records, onUpdateRecord }) => {
   const [tempAnnotation, setTempAnnotation] = useState("");
   const [hoverNode, setHoverNode] = useState<string | number | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | number | null>(null);
+  const [selectedWord, setSelectedWord] = useState<string | null>(null);
+  const [lexicalMode, setLexicalMode] = useState<'frequency' | 'tfidf'>('frequency');
   const recordRefs = useRef<Record<string | number, HTMLDivElement | null>>({});
 
   // Reset local state when the dataset changes
@@ -26,6 +28,8 @@ const ReadingRoom: React.FC<Props> = ({ records, onUpdateRecord }) => {
     setTempAnnotation("");
     setHoverNode(null);
     setSelectedNodeId(null);
+    setSelectedWord(null);
+    setLexicalMode('frequency');
     recordRefs.current = {};
   }, [records]);
 
@@ -195,10 +199,67 @@ const ReadingRoom: React.FC<Props> = ({ records, onUpdateRecord }) => {
 
     const topGlobalWords = Object.entries(globalDF).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([name, value]) => ({ name, value }));
 
-    return { 
-      nodes, 
-      links: links.map(l => ({ ...l, source: nodes[l.sourceIdx], target: nodes[l.targetIdx] })), 
-      topGlobalWords 
+    // Enhanced lexical data: category breakdown per word
+    const categories = Array.from(new Set(records.map(r => r.category || 'Uncategorized')));
+    const wordCategoryDF: Record<string, Record<string, number>> = {};
+    const wordRecordIds: Record<string, Set<string | number>> = {};
+    records.forEach(r => {
+      const cat = r.category || 'Uncategorized';
+      const text = `${r.title} ${r.description || ''} ${r.category || ''}`.toLowerCase();
+      const uniqueWords = new Set(text.split(/\W+/).filter(w => w.length > 3 && !stopWords.has(w)));
+      uniqueWords.forEach(w => {
+        if (!wordCategoryDF[w]) wordCategoryDF[w] = {};
+        wordCategoryDF[w][cat] = (wordCategoryDF[w][cat] || 0) + 1;
+        if (!wordRecordIds[w]) wordRecordIds[w] = new Set();
+        wordRecordIds[w].add(r.id);
+      });
+    });
+
+    // Aggregated TF-IDF importance per word (sum of TF-IDF scores across all docs)
+    const globalTFIDF: Record<string, number> = {};
+    records.forEach(r => {
+      const tfs = docTFs[r.id];
+      const totalTerms = Object.values(tfs).reduce((a, b) => a + b, 0) || 1;
+      Object.entries(tfs).forEach(([word, count]) => {
+        const tf = count / totalTerms;
+        const idf = Math.log(numDocs / (globalDF[word] || 1));
+        globalTFIDF[word] = (globalTFIDF[word] || 0) + tf * idf;
+      });
+    });
+
+    // Build enhanced word list (top 20)
+    const enrichedWordsByDF = Object.entries(globalDF)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map(([name, value]) => ({
+        name,
+        value,
+        proportion: Math.round((value / numDocs) * 100),
+        categories: wordCategoryDF[name] || {},
+        tfidfScore: globalTFIDF[name] || 0,
+        recordIds: Array.from(wordRecordIds[name] || [])
+      }));
+
+    const enrichedWordsByTFIDF = Object.entries(globalTFIDF)
+      .filter(([w]) => globalDF[w] >= 2) // appear in at least 2 docs
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map(([name, score]) => ({
+        name,
+        value: globalDF[name] || 0,
+        proportion: Math.round(((globalDF[name] || 0) / numDocs) * 100),
+        categories: wordCategoryDF[name] || {},
+        tfidfScore: score,
+        recordIds: Array.from(wordRecordIds[name] || [])
+      }));
+
+    return {
+      nodes,
+      links: links.map(l => ({ ...l, source: nodes[l.sourceIdx], target: nodes[l.targetIdx] })),
+      topGlobalWords,
+      enrichedWordsByDF,
+      enrichedWordsByTFIDF,
+      categories
     };
   }, [records]);
 
@@ -237,20 +298,24 @@ const ReadingRoom: React.FC<Props> = ({ records, onUpdateRecord }) => {
                   {analysis.links.map((link, i) => {
                     const isHovered = hoverNode === link.source.id || hoverNode === link.target.id;
                     return (
-                      <line 
-                        key={i} 
-                        x1={link.source.x} y1={link.source.y} 
-                        x2={link.target.x} y2={link.target.y} 
-                        stroke={link.type === 'semantic' ? '#818cf8' : '#64748b'} 
-                        strokeWidth={isHovered ? 2.5 : Math.max(1, link.strength * 0.6)} 
-                        strokeOpacity={isHovered ? 1.0 : 0.35} 
+                      <line
+                        key={i}
+                        x1={link.source.x} y1={link.source.y}
+                        x2={link.target.x} y2={link.target.y}
+                        stroke={link.type === 'semantic' ? '#818cf8' : '#64748b'}
+                        strokeWidth={isHovered ? 2.5 : Math.max(1, link.strength * 0.6)}
+                        strokeOpacity={selectedWord ? 0.08 : isHovered ? 1.0 : 0.35}
                         className="transition-all duration-300"
                       />
                     );
                   })}
                   
                   {/* Node Layer */}
-                  {analysis.nodes.map((node) => (
+                  {analysis.nodes.map((node) => {
+                    const wordData = selectedWord ? (lexicalMode === 'frequency' ? analysis.enrichedWordsByDF : analysis.enrichedWordsByTFIDF).find(w => w.name === selectedWord) : null;
+                    const isWordHighlighted = wordData ? wordData.recordIds.includes(node.id) : false;
+                    const isDimmed = selectedWord && !isWordHighlighted;
+                    return (
                     <g
                       key={node.id}
                       onMouseEnter={() => setHoverNode(node.id)}
@@ -258,16 +323,17 @@ const ReadingRoom: React.FC<Props> = ({ records, onUpdateRecord }) => {
                       onClick={() => handleNodeClick(node.id)}
                       className="cursor-pointer group"
                     >
-                      <circle 
-                        cx={node.x} cy={node.y} r={node.size + 4} 
-                        fill={node.density > 2 ? '#818cf810' : 'transparent'} 
+                      <circle
+                        cx={node.x} cy={node.y} r={node.size + 4}
+                        fill={isWordHighlighted ? '#6366f130' : node.density > 2 ? '#818cf810' : 'transparent'}
                         className={`transition-all duration-500 ${hoverNode === node.id ? 'fill-amber-500/20 scale-150' : ''}`}
                       />
-                      <circle 
-                        cx={node.x} cy={node.y} r={node.size} 
-                        fill={hoverNode === node.id ? '#fbbf24' : node.density > 4 ? '#818cf8' : '#475569'} 
-                        stroke={hoverNode === node.id ? '#ffffff' : '#1e293b'} 
-                        strokeWidth={hoverNode === node.id ? 2 : 1}
+                      <circle
+                        cx={node.x} cy={node.y} r={isWordHighlighted ? node.size + 2 : node.size}
+                        fill={hoverNode === node.id ? '#fbbf24' : isWordHighlighted ? '#a5b4fc' : isDimmed ? '#334155' : node.density > 4 ? '#818cf8' : '#475569'}
+                        stroke={hoverNode === node.id ? '#ffffff' : isWordHighlighted ? '#818cf8' : '#1e293b'}
+                        strokeWidth={hoverNode === node.id ? 2 : isWordHighlighted ? 2 : 1}
+                        opacity={isDimmed ? 0.25 : 1}
                         className="transition-all duration-300"
                       />
                       {hoverNode === node.id && (
@@ -280,29 +346,112 @@ const ReadingRoom: React.FC<Props> = ({ records, onUpdateRecord }) => {
                         </g>
                       )}
                     </g>
-                  ))}
+                    );
+                  })}
                 </svg>
               </div>
             </div>
 
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
-              <div className="flex items-center gap-2 mb-6 text-indigo-400">
-                <Hash size={18} />
-                <h3 className="text-sm font-bold uppercase tracking-widest">Global Lexical Distribution</h3>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2 text-indigo-400">
+                  <Hash size={18} />
+                  <h3 className="text-sm font-bold uppercase tracking-widest">Global Lexical Distribution</h3>
+                </div>
+                <div className="flex items-center gap-1 bg-slate-950 rounded-lg p-0.5 border border-slate-800">
+                  <button
+                    onClick={() => { setLexicalMode('frequency'); setSelectedWord(null); }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${lexicalMode === 'frequency' ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 'text-slate-500 hover:text-slate-300'}`}
+                  >
+                    <BarChart2 size={11} /> Frequency
+                  </button>
+                  <button
+                    onClick={() => { setLexicalMode('tfidf'); setSelectedWord(null); }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${lexicalMode === 'tfidf' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'text-slate-500 hover:text-slate-300'}`}
+                  >
+                    <TrendingUp size={11} /> TF-IDF Weight
+                  </button>
+                </div>
               </div>
-              <div className="h-56">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={analysis.topGlobalWords} layout="vertical" margin={{ left: 10, right: 30 }}>
-                    <XAxis type="number" hide />
-                    <YAxis dataKey="name" type="category" stroke="#94a3b8" fontSize={10} width={90} tickLine={false} axisLine={false} />
-                    <Tooltip 
-                      cursor={{fill: '#1e293b'}}
-                      contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }} 
-                    />
-                    <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={12} />
-                  </BarChart>
-                </ResponsiveContainer>
+              {selectedWord && (
+                <div className="mb-3 flex items-center justify-between bg-indigo-950/30 border border-indigo-500/20 rounded-lg px-3 py-2">
+                  <span className="text-[10px] text-indigo-300 font-bold uppercase tracking-wider">
+                    Filtering topology by: <span className="text-indigo-200">"{selectedWord}"</span>
+                    {' '}— {((lexicalMode === 'frequency' ? analysis.enrichedWordsByDF : analysis.enrichedWordsByTFIDF).find(w => w.name === selectedWord))?.recordIds.length || 0} records
+                  </span>
+                  <button onClick={() => setSelectedWord(null)} className="text-[10px] text-slate-500 hover:text-slate-300 font-bold uppercase">Clear</button>
+                </div>
+              )}
+              <p className="text-[10px] text-slate-600 mb-3 font-medium">
+                {lexicalMode === 'frequency'
+                  ? 'Ranked by document frequency — how many records contain each term. Click a word to highlight its records in the topology.'
+                  : 'Ranked by aggregated TF-IDF weight — terms that are both frequent and distinctive across the corpus. Click to highlight.'}
+              </p>
+              <div className="max-h-[420px] overflow-y-auto pr-1 custom-scrollbar space-y-1">
+                {(lexicalMode === 'frequency' ? analysis.enrichedWordsByDF : analysis.enrichedWordsByTFIDF).map((word, idx) => {
+                  const isSelected = selectedWord === word.name;
+                  const maxVal = lexicalMode === 'frequency'
+                    ? (analysis.enrichedWordsByDF[0]?.value || 1)
+                    : (analysis.enrichedWordsByTFIDF[0]?.tfidfScore || 1);
+                  const barWidth = lexicalMode === 'frequency'
+                    ? (word.value / maxVal) * 100
+                    : (word.tfidfScore / maxVal) * 100;
+                  const catEntries = Object.entries(word.categories);
+                  const catTotal = catEntries.reduce((sum, [, v]) => sum + v, 0);
+                  // Stable category color palette
+                  const catColors = ['#6366f1', '#818cf8', '#a5b4fc', '#4f46e5', '#c7d2fe', '#3730a3', '#e0e7ff', '#7c3aed', '#8b5cf6', '#a78bfa'];
+
+                  return (
+                    <div
+                      key={word.name}
+                      onClick={() => setSelectedWord(isSelected ? null : word.name)}
+                      className={`group flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all ${isSelected ? 'bg-indigo-500/15 border border-indigo-500/30' : 'hover:bg-slate-800/50 border border-transparent'}`}
+                    >
+                      <span className="text-[9px] text-slate-600 font-mono w-4 text-right">{idx + 1}</span>
+                      <span className={`text-xs font-bold w-20 truncate transition-colors ${isSelected ? 'text-indigo-300' : 'text-slate-300 group-hover:text-slate-100'}`}>
+                        {word.name}
+                      </span>
+                      <div className="flex-1 h-4 bg-slate-950/60 rounded overflow-hidden relative">
+                        {/* Stacked category segments */}
+                        <div className="absolute inset-0 flex" style={{ width: `${barWidth}%` }}>
+                          {catEntries.map(([cat, count], ci) => (
+                            <div
+                              key={cat}
+                              title={`${cat}: ${count} records`}
+                              style={{
+                                width: `${(count / catTotal) * 100}%`,
+                                backgroundColor: catColors[analysis.categories.indexOf(cat) % catColors.length],
+                                opacity: isSelected ? 1 : 0.7
+                              }}
+                              className="h-full transition-opacity group-hover:opacity-100"
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-slate-500 font-mono w-12 text-right">
+                        {lexicalMode === 'frequency' ? word.value : word.tfidfScore.toFixed(1)}
+                      </span>
+                      <span className="text-[9px] text-slate-600 font-mono w-10 text-right">
+                        {word.proportion}%
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
+              {/* Category legend */}
+              {analysis.categories.length > 1 && (
+                <div className="mt-4 pt-3 border-t border-slate-800 flex flex-wrap gap-x-4 gap-y-1">
+                  {analysis.categories.slice(0, 8).map((cat, ci) => {
+                    const catColors = ['#6366f1', '#818cf8', '#a5b4fc', '#4f46e5', '#c7d2fe', '#3730a3', '#e0e7ff', '#7c3aed', '#8b5cf6', '#a78bfa'];
+                    return (
+                      <div key={cat} className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: catColors[ci % catColors.length] }} />
+                        <span className="text-[9px] text-slate-500 font-medium">{cat}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
@@ -327,9 +476,12 @@ const ReadingRoom: React.FC<Props> = ({ records, onUpdateRecord }) => {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-800 mt-4">
+              <div className="pt-4 border-t border-slate-800 mt-4 space-y-3">
                 <p className="text-[9px] text-slate-600 uppercase font-black leading-tight">
                   Computational Method: TF-IDF word frequency cross-referencing + Force-Directed Layering
+                </p>
+                <p className="text-[9px] text-slate-500 leading-relaxed">
+                  <strong className="text-slate-400">Lexical Probe:</strong> Click any word in the distribution below to highlight matching records in the topology. Toggle between raw frequency and TF-IDF weight to shift between breadth and distinctiveness.
                 </p>
               </div>
             </div>
