@@ -12,5 +12,8 @@
    `npm run dev`
 
 The idea is that this web app lets you work on a csv of your humanities data, generate a couple of useful distant views on it, export it all into an obsidian vault for further writing around your data. The local llm stuff is just an experiment to see if it can offer useful provocations or perspectives on the data. The local llm looks for silences, ellisions, or things that seem orthoganal to the rest of the collection. See the ollama services file for the prompt.
+![action-shot2](action_shot2.png)
+
+Another view of the provocation tab:
 
 ![action-shot](action_shot.png)
