@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import JSZip from 'jszip';
 import DashboardHeader from './components/DashboardHeader';
 import Visualizations from './components/Visualizations';
@@ -10,13 +10,31 @@ import ReadingRoom from './components/ReadingRoom';
 import { MARITIME_DATASET, SETTLER_DIARY_DATASET } from './constants';
 import { Dataset, DataRecord, Provocation } from './types';
 import { parseCSV } from './services/csvParser';
-import { LayoutGrid, ListFilter, BrainCircuit, Activity, BookOpen, Download, FolderArchive } from 'lucide-react';
+import { synthesizeDatasetDescription } from './services/ollamaService';
+import { LayoutGrid, ListFilter, BrainCircuit, Activity, BookOpen, Download, FolderArchive, Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [dataset, setDataset] = useState<Dataset>(MARITIME_DATASET);
   const [activeTab, setActiveTab] = useState<'overview' | 'explorer' | 'reading' | 'vector'>('overview');
   const [isManualOpen, setIsManualOpen] = useState(false);
   const [currentProvocations, setCurrentProvocations] = useState<Provocation[]>([]);
+  const [isSynthesizing, setIsSynthesizing] = useState(false);
+  const synthesisGenRef = useRef(0);
+
+  const triggerDescriptionSynthesis = (records: DataRecord[], datasetName: string) => {
+    const gen = ++synthesisGenRef.current;
+    setIsSynthesizing(true);
+    synthesizeDatasetDescription(records).then(description => {
+      // Only apply if the dataset hasn't changed since we started
+      if (gen === synthesisGenRef.current) {
+        setDataset(prev => prev.name === datasetName ? { ...prev, metadata: { ...prev.metadata, description } } : prev);
+      }
+    }).finally(() => {
+      if (gen === synthesisGenRef.current) {
+        setIsSynthesizing(false);
+      }
+    });
+  };
 
   const handleUpdateRecord = (id: string | number, updates: Partial<DataRecord>) => {
     setDataset(prev => ({
@@ -48,19 +66,26 @@ const App: React.FC = () => {
         if (fileName.endsWith('.json')) {
           const parsed = JSON.parse(content);
           if (parsed.records) {
+            const name = file.name.split('.')[0];
+            const hasDescription = parsed.metadata?.description && parsed.metadata.description.length > 0;
             setDataset({
-              name: file.name.split('.')[0],
+              name,
               records: parsed.records,
-              metadata: parsed.metadata || { description: "User uploaded JSON archive", source: "Local Disk", fields: [] }
+              metadata: parsed.metadata || { description: "Synthesizing archival description...", source: "Local Disk", fields: [] }
             });
+            if (!hasDescription) {
+              triggerDescriptionSynthesis(parsed.records, name);
+            }
           }
         } else if (fileName.endsWith('.csv')) {
           const records = parseCSV(content);
+          const name = file.name.split('.')[0];
           setDataset({
-            name: file.name.split('.')[0],
+            name,
             records: records,
-            metadata: { description: "User uploaded CSV archive", source: "Local Disk", fields: [] }
+            metadata: { description: "Synthesizing archival description...", source: "Local Disk", fields: [] }
           });
+          triggerDescriptionSynthesis(records, name);
         }
       } catch (err) {
         alert("Parse Error: Ensure your file follows the format described in the Manual.");
@@ -186,7 +211,10 @@ const App: React.FC = () => {
                 <div className="flex-1 space-y-4 z-10">
                   <div className="flex items-center gap-2 text-amber-500"><Activity size={18} /><span className="text-xs font-bold uppercase tracking-widest">Active Interrogation</span></div>
                   <h2 className="text-3xl font-bold heritage-font leading-tight">{dataset.name}</h2>
-                  <p className="text-slate-400 max-w-2xl text-lg leading-relaxed font-serif italic">{dataset.metadata.description}</p>
+                  <p className="text-slate-400 max-w-2xl text-lg leading-relaxed font-serif italic">
+                    {isSynthesizing && <Loader2 size={16} className="inline-block mr-2 animate-spin text-amber-500" />}
+                    {dataset.metadata.description}
+                  </p>
                   <div className="flex flex-wrap gap-4 pt-4">
                     <div className="px-5 py-3 bg-slate-800/50 rounded-xl border border-slate-800 shadow-inner"><span className="block text-2xl font-bold text-slate-100">{dataset.records.length}</span><span className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">Interrogated</span></div>
                     <div className="flex gap-2 ml-auto">
