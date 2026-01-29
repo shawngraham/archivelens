@@ -1,12 +1,4 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
 
-# Run and deploy your AI Studio app
-
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/drive/1l0bEpmXJtJbgN27loo2qnKBqi4qPlK2W
 
 ## Run Locally
 
@@ -15,6 +7,10 @@ View your app in AI Studio: https://ai.studio/apps/drive/1l0bEpmXJtJbgN27loo2qnK
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+2. Install Ollama. Pull an ollama model you want to use. Change the line in the ollama services file that passes the model name. Save!
 3. Run the app:
    `npm run dev`
+
+The idea is that this web app lets you work on a csv of your humanities data, generate a couple of useful distant views on it, export it all into an obsidian vault for further writing around your data. The local llm stuff is just an experiment to see if it can offer useful provocations or perspectives on the data. The local llm looks for silences, ellisions, or things that seem orthoganal to the rest of the collection. See the ollama services file for the prompt.
+
+![action-shot](action_shot.png)
