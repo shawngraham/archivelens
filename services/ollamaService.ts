@@ -5,6 +5,52 @@ import { DataRecord, Provocation } from "../types";
  * Communicates with a local Ollama instance (http://localhost:11434).
  * Requires OLLAMA_ORIGINS="*" environment variable for browser access.
  */
+
+export const synthesizeDatasetDescription = async (records: DataRecord[]): Promise<string> => {
+  const dataSummary = JSON.stringify(records.slice(0, 15).map(r => ({
+    title: r.title,
+    date: r.date,
+    category: r.category,
+    desc: r.description?.slice(0, 80)
+  })));
+
+  const prompt = `You are an archival studies scholar. Given this fragment of a dataset (${records.length} total records, showing up to 15), write a single sentence describing what this collection appears to document. Be specific about subject matter, time period, and geography if evident. Write in the style of a tentative first impression, e.g. "At first glance, this dataset appears to capture..." Keep it under 35 words. Return ONLY the sentence, no quotes, no preamble.
+
+Records:
+${dataSummary}`;
+
+  try {
+    const response = await fetch("http://localhost:11434/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "qwen3",
+        prompt,
+        stream: false,
+        options: {
+          temperature: 0.3,
+          num_ctx: 2048
+        }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Ollama responded with status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    let text = (result.response || "").trim();
+    // Strip any wrapping quotes the model might add
+    text = text.replace(/^["']|["']$/g, '').trim();
+    // Strip any <think>...</think> blocks the model might produce
+    text = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    return text || "A user-provided archival dataset awaiting scholarly description.";
+  } catch (error) {
+    console.error("Ollama synthesis error:", error);
+    return "A user-provided archival dataset awaiting scholarly description.";
+  }
+};
+
 export const getVectorProvocations = async (data: DataRecord[]): Promise<Provocation[]> => {
   // Use a targeted slice of the dataset to provide context
   const dataSummary = JSON.stringify(data.slice(0, 15).map(r => ({
