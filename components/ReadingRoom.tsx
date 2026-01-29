@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Book, Quote, Hash, AlignLeft, Maximize2, Minimize2, Edit3, Save, Eye, Layers, ImageIcon, Network, Share2, Target } from 'lucide-react';
 import { DataRecord } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -15,6 +15,36 @@ const ReadingRoom: React.FC<Props> = ({ records, onUpdateRecord }) => {
   const [editingId, setEditingId] = useState<string | number | null>(null);
   const [tempAnnotation, setTempAnnotation] = useState("");
   const [hoverNode, setHoverNode] = useState<string | number | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | number | null>(null);
+  const recordRefs = useRef<Record<string | number, HTMLDivElement | null>>({});
+
+  // Reset local state when the dataset changes
+  useEffect(() => {
+    setViewMode('distant');
+    setExpandedRecords(new Set());
+    setEditingId(null);
+    setTempAnnotation("");
+    setHoverNode(null);
+    setSelectedNodeId(null);
+    recordRefs.current = {};
+  }, [records]);
+
+  // Scroll to selected record after switching to close witnessing
+  useEffect(() => {
+    if (viewMode === 'close' && selectedNodeId !== null) {
+      const timeout = setTimeout(() => {
+        recordRefs.current[selectedNodeId]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setSelectedNodeId(null);
+      }, 100);
+      return () => clearTimeout(timeout);
+    }
+  }, [viewMode, selectedNodeId]);
+
+  const handleNodeClick = (id: string | number) => {
+    setSelectedNodeId(id);
+    setExpandedRecords(new Set([id]));
+    setViewMode('close');
+  };
 
   const toggleExpand = (id: string | number) => {
     const newSet = new Set(expandedRecords);
@@ -221,10 +251,11 @@ const ReadingRoom: React.FC<Props> = ({ records, onUpdateRecord }) => {
                   
                   {/* Node Layer */}
                   {analysis.nodes.map((node) => (
-                    <g 
-                      key={node.id} 
-                      onMouseEnter={() => setHoverNode(node.id)} 
+                    <g
+                      key={node.id}
+                      onMouseEnter={() => setHoverNode(node.id)}
                       onMouseLeave={() => setHoverNode(null)}
+                      onClick={() => handleNodeClick(node.id)}
                       className="cursor-pointer group"
                     >
                       <circle 
@@ -241,10 +272,11 @@ const ReadingRoom: React.FC<Props> = ({ records, onUpdateRecord }) => {
                       />
                       {hoverNode === node.id && (
                         <g className="animate-in fade-in zoom-in-95 duration-200">
-                          <rect x={node.x + 12} y={node.y - 20} width={140} height={55} rx={8} fill="#1e293b" stroke="#475569" strokeWidth={1} className="shadow-2xl" />
+                          <rect x={node.x + 12} y={node.y - 20} width={140} height={68} rx={8} fill="#1e293b" stroke="#475569" strokeWidth={1} className="shadow-2xl" />
                           <text x={node.x + 20} y={node.y - 2} fill="white" fontSize={10} fontWeight="bold" className="heritage-font">{node.name.slice(0, 18)}{node.name.length > 18 ? '...' : ''}</text>
                           <text x={node.x + 20} y={node.y + 12} fill="#94a3b8" fontSize={8} fontWeight="bold" className="uppercase tracking-widest">Density: {node.density.toFixed(1)}</text>
                           <text x={node.x + 20} y={node.y + 24} fill="#818cf8" fontSize={8} fontWeight="bold">Tags: {node.keywords.slice(0, 2).join(', ')}</text>
+                          <text x={node.x + 20} y={node.y + 38} fill="#fbbf24" fontSize={7} fontWeight="bold" className="uppercase">Click to witness →</text>
                         </g>
                       )}
                     </g>
@@ -321,7 +353,7 @@ const ReadingRoom: React.FC<Props> = ({ records, onUpdateRecord }) => {
               const isExpanded = expandedRecords.has(record.id);
               const isEditing = editingId === record.id;
               return (
-                <div key={record.id} className={`bg-slate-900 border transition-all duration-500 rounded-xl overflow-hidden ${isExpanded ? 'border-amber-500/40 shadow-[0_0_30px_-10px_rgba(251,191,36,0.1)]' : 'border-slate-800 hover:border-slate-700'}`}>
+                <div key={record.id} ref={el => { recordRefs.current[record.id] = el; }} className={`bg-slate-900 border transition-all duration-500 rounded-xl overflow-hidden ${isExpanded ? 'border-amber-500/40 shadow-[0_0_30px_-10px_rgba(251,191,36,0.1)]' : 'border-slate-800 hover:border-slate-700'}`}>
                   <div className="px-6 py-5 flex items-center justify-between cursor-pointer group select-none" onClick={() => toggleExpand(record.id)}>
                     <div className="flex items-center gap-4">
                       <div className={`p-2.5 rounded-xl transition-all duration-300 ${isExpanded ? 'bg-amber-500/20 text-amber-500 shadow-inner scale-110' : 'bg-slate-800 text-slate-500 group-hover:text-slate-300'}`}>
