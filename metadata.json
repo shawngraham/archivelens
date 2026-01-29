@@ -1,0 +1,6 @@
+
+{
+  "name": "ArchiveLens: Humanities Data Explorer",
+  "description": "A private-first heritage and humanities data dashboard. Features quantitative visualizations, qualitative network analysis, and local AI provocations (via Ollama) to reveal archival silences.",
+  "requestFramePermissions": []
+}
