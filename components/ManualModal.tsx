@@ -1,7 +1,7 @@
 
 import React from 'react';
 // Added 'Network' to the imports to fix the missing name error
-import { X, Code, FileJson, CheckCircle2, FileSpreadsheet, Book, LayoutGrid, ListFilter, BrainCircuit, Download, ImageIcon, Search, Microscope, BookOpen, Terminal, Database, Link, Share2, Info, FolderArchive, Zap, MousePointer2, Network } from 'lucide-react';
+import { X, Code, FileJson, CheckCircle2, FileSpreadsheet, Book, LayoutGrid, ListFilter, BrainCircuit, Download, ImageIcon, Search, Microscope, BookOpen, Terminal, Database, Link, Share2, Info, FolderArchive, Zap, MousePointer2, Network, Waypoints } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -145,6 +145,16 @@ const ManualModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
               <div className="space-y-3">
                 <div className="flex items-center gap-2 font-bold text-slate-100">
+                  <Waypoints className="text-emerald-400" size={18} />
+                  <h4>Knowledge Graph Embeddings</h4>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Located in the Reading Room's Distant Analysis view. Transforms your archival records into a <strong>knowledge graph</strong> of (entity, relation, entity) triples, then trains a neural embedding model to learn latent relational structure. See below for details.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 font-bold text-slate-100">
                   <BrainCircuit className="text-amber-500" size={18} />
                   <h4>Vector Space Provocations</h4>
                 </div>
@@ -205,6 +215,124 @@ const ManualModal: React.FC<Props> = ({ isOpen, onClose }) => {
               <p className="text-[10px] text-slate-500 italic border-t border-slate-800 pt-4">
                 Note: ArchiveLens communicates with Ollama at <strong>http://localhost:11434</strong>. If the connection fails, check your Firewall or OLLAMA_ORIGINS setting.
               </p>
+            </div>
+          </section>
+
+          {/* Knowledge Graph Embeddings Documentation */}
+          <section className="space-y-6">
+            <h3 className="text-emerald-400 text-xs font-bold uppercase tracking-widest border-b border-slate-800 pb-2 flex items-center gap-2">
+              <Waypoints size={14} /> Knowledge Graph Embeddings — Deep Dive
+            </h3>
+
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <h4 className="text-sm font-bold text-slate-200">What Are Knowledge Graph Embeddings?</h4>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  A knowledge graph represents information as <strong>(head, relation, tail)</strong> triples — for example,
+                  <em className="text-slate-300"> (Treaty of Westphalia, has_category, Diplomatic)</em> or
+                  <em className="text-slate-300"> (Ship Aurora, located_in, Liverpool)</em>.
+                  Knowledge Graph Embedding (KGE) models learn low-dimensional vector representations for every entity and relation,
+                  placing entities that participate in similar relational patterns close together in embedding space.
+                </p>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  This allows the model to <strong>predict missing links</strong> ("what other entities might share this relation?"),
+                  <strong> find similar entities</strong> by embedding proximity, and <strong>reveal latent structure</strong> that
+                  categorical labels alone cannot capture.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-sm font-bold text-slate-200">How Triples Are Extracted</h4>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  ArchiveLens automatically converts your flat tabular records into a knowledge graph using <strong>field-based extraction</strong>:
+                </p>
+                <div className="bg-slate-950 rounded-xl border border-slate-800 overflow-hidden shadow-inner">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="bg-slate-800/50 text-slate-400 font-bold uppercase tracking-tighter">
+                        <th className="px-4 py-2 border-b border-slate-800">Record Field</th>
+                        <th className="px-4 py-2 border-b border-slate-800">Relation</th>
+                        <th className="px-4 py-2 border-b border-slate-800">Example Triple</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-slate-300 font-mono text-[11px]">
+                      <tr className="border-b border-slate-800/50"><td className="px-4 py-2 text-emerald-400">category</td><td className="px-4 py-2">has_category</td><td className="px-4 py-2">(Ship Aurora, has_category, Cargo)</td></tr>
+                      <tr className="border-b border-slate-800/50"><td className="px-4 py-2 text-emerald-400">location</td><td className="px-4 py-2">located_in</td><td className="px-4 py-2">(Ship Aurora, located_in, Liverpool)</td></tr>
+                      <tr className="border-b border-slate-800/50"><td className="px-4 py-2 text-emerald-400">date</td><td className="px-4 py-2">dated_to</td><td className="px-4 py-2">(Ship Aurora, dated_to, 1842)</td></tr>
+                      <tr className="border-b border-slate-800/50"><td className="px-4 py-2 text-emerald-400">value</td><td className="px-4 py-2">has_magnitude</td><td className="px-4 py-2">(Ship Aurora, has_magnitude, high_magnitude)</td></tr>
+                      <tr className="border-b border-slate-800/50"><td className="px-4 py-2 text-emerald-400">description</td><td className="px-4 py-2">mentions</td><td className="px-4 py-2">(Ship Aurora, mentions, cargo)</td></tr>
+                      <tr><td className="px-4 py-2 text-emerald-400">shared category</td><td className="px-4 py-2">shares_category_with</td><td className="px-4 py-2">(Ship Aurora, shares_category_with, Ship Belinda)</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-sm font-bold text-slate-200">Available Models</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
+                    <h5 className="text-xs font-bold text-emerald-400 uppercase">DistMult</h5>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                      Diagonal bilinear model. Scores triples as <strong className="text-slate-400 font-mono">sum(h * r * t)</strong>.
+                      Best for <strong>symmetric</strong> relations (e.g., "shares_category_with"). Fastest to train.
+                    </p>
+                  </div>
+                  <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
+                    <h5 className="text-xs font-bold text-emerald-400 uppercase">ComplEx</h5>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                      Complex-valued embeddings. Scores via <strong className="text-slate-400 font-mono">Re(sum(h * r * conj(t)))</strong>.
+                      Handles both <strong>symmetric and antisymmetric</strong> relations. Good default choice.
+                    </p>
+                  </div>
+                  <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
+                    <h5 className="text-xs font-bold text-emerald-400 uppercase">RotatE</h5>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                      Models relations as <strong>rotations</strong> in complex space. Scores via <strong className="text-slate-400 font-mono">-||h ∘ r - t||</strong>.
+                      Excels at <strong>hierarchical, compositional</strong>, and inversion patterns.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-sm font-bold text-slate-200">Interpreting Results</h4>
+                <div className="space-y-2">
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    <strong className="text-slate-300">Embedding Scatter Plot:</strong> Entity embeddings projected to 2D via PCA.
+                    Record entities appear as larger circles colored by category; attribute values (locations, dates, keywords)
+                    appear as smaller dots. Clusters indicate entities with similar relational roles in the knowledge graph.
+                  </p>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    <strong className="text-slate-300">Similar Entities:</strong> Select a record to see its nearest neighbors
+                    by cosine similarity in embedding space. Neighbors that share no explicit category or keyword links
+                    suggest <strong>latent structural similarity</strong> — a form of distant reading beyond taxonomy.
+                  </p>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    <strong className="text-slate-300">Link Prediction:</strong> Select an entity and a relation type.
+                    The model ranks all entities by how plausible the model considers the triple
+                    <em className="text-slate-300"> (entity, relation, ?)</em>. High-scoring predictions that don't exist
+                    in the original data point to <strong>possible undocumented connections</strong> — archival silences
+                    that the embedding geometry makes legible.
+                  </p>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    <strong className="text-slate-300">Evaluation Metrics:</strong> <strong>MRR</strong> (Mean Reciprocal Rank)
+                    measures how highly the model ranks true triples on average (closer to 1.0 = better).
+                    <strong> Hits@10</strong> shows what percentage of true triples appear in the top 10 predictions.
+                    These are computed on a sample of the training set for quick diagnostic feedback.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-slate-800/30 border border-slate-700 rounded-xl p-4 space-y-2">
+                <h5 className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Tips for Archival Use</h5>
+                <ul className="text-[10px] text-slate-500 leading-relaxed space-y-1 list-disc list-inside">
+                  <li>Start with <strong className="text-slate-400">ComplEx</strong> as a default — it handles the mix of symmetric and directed relations typical of archival data.</li>
+                  <li>Use <strong className="text-slate-400">dimension 50</strong> and <strong className="text-slate-400">100 epochs</strong> as a baseline; increase for larger datasets.</li>
+                  <li>A dropping loss curve indicates the model is learning structure. If loss plateaus high, try a larger dimension or more epochs.</li>
+                  <li>Link prediction is most interesting for <strong className="text-slate-400">mentions</strong> and <strong className="text-slate-400">located_in</strong> relations — these can reveal thematic and geographic connections not explicit in the catalog.</li>
+                  <li>No data leaves your browser. All computation runs locally in JavaScript.</li>
+                </ul>
+              </div>
             </div>
           </section>
         </div>

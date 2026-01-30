@@ -3,6 +3,7 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Book, Quote, Hash, AlignLeft, Maximize2, Minimize2, Edit3, Save, Eye, Layers, ImageIcon, Network, Share2, Target, BarChart2, TrendingUp, ArrowUpDown } from 'lucide-react';
 import { DataRecord } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import KnowledgeGraphCard from './KnowledgeGraphCard';
 
 interface Props {
   records: DataRecord[];
@@ -271,6 +272,7 @@ const ReadingRoom: React.FC<Props> = ({ records, onUpdateRecord }) => {
       </div>
 
       {viewMode === 'distant' ? (
+        <div className="space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl relative overflow-hidden">
@@ -486,6 +488,10 @@ const ReadingRoom: React.FC<Props> = ({ records, onUpdateRecord }) => {
               </div>
             </div>
           </div>
+        </div>
+
+          {/* Knowledge Graph Embeddings */}
+          <KnowledgeGraphCard records={records} />
         </div>
       ) : (
         <div className="max-w-5xl mx-auto space-y-4">
