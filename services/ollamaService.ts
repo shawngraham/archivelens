@@ -1,145 +1,123 @@
-
 import { DataRecord, Provocation } from "../types";
 
-/**
- * Communicates with a local Ollama instance (http://localhost:11434).
- * Requires OLLAMA_ORIGINS="*" environment variable for browser access.
- */
+const getDistributedSample = (records: DataRecord[], sampleSize: number = 15): DataRecord[] => {
+  if (records.length <= sampleSize) return records;
+  const sampled: DataRecord[] = [];
+  const step = (records.length - 1) / (sampleSize - 1);
+  for (let i = 0; i < sampleSize; i++) {
+    const index = Math.floor(i * step);
+    sampled.push(records[index]);
+  }
+  return sampled;
+};
 
 export const synthesizeDatasetDescription = async (records: DataRecord[]): Promise<string> => {
-  const dataSummary = JSON.stringify(records.slice(0, 15).map(r => ({
+  const sample = getDistributedSample(records, 15);
+  const dataSummary = JSON.stringify(sample.map(r => ({
     title: r.title,
     date: r.date,
     category: r.category,
     desc: r.description?.slice(0, 80)
   })));
 
-  const prompt = `You are an archival studies scholar. Given this fragment of a dataset (${records.length} total records, showing up to 15), write a single sentence describing what this collection appears to document. Be specific about subject matter, time period, and geography if evident. Write in the style of a tentative first impression, e.g. "At first glance, this dataset appears to capture..." Keep it under 35 words. Return ONLY the sentence, no quotes, no preamble.
-
-Records:
-${dataSummary}`;
+  const prompt = `You are an archival studies scholar. Given this sample of ${records.length} records, write one sentence (max 35 words) describing the subject and geography. Do not use quotes or preamble.
+  
+  Records: ${dataSummary}`;
 
   try {
     const response = await fetch("http://localhost:11434/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "qwen3",
+        model: "deepseek-r1:8b",
         prompt,
         stream: false,
-        options: {
-          temperature: 0.3,
-          num_ctx: 2048
-        }
+        options: { temperature: 0.3 }
       })
     });
 
-    if (!response.ok) {
-      throw new Error(`Ollama responded with status: ${response.status}`);
-    }
-
     const result = await response.json();
-    let text = (result.response || "").trim();
-    // Strip any wrapping quotes the model might add
-    text = text.replace(/^["']|["']$/g, '').trim();
-    // Strip any <think>...</think> blocks the model might produce
-    text = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-    return text || "A user-provided archival dataset awaiting scholarly description.";
+    // Scrub DeepSeek thinking blocks
+    return result.response.replace(/<think>[\s\S]*?<\/think>/g, '').trim().replace(/^["']|["']$/g, '');
   } catch (error) {
-    console.error("Ollama synthesis error:", error);
-    return "A user-provided archival dataset awaiting scholarly description.";
+    return "An archival dataset awaiting scholarly description.";
   }
 };
 
 export const getVectorProvocations = async (data: DataRecord[]): Promise<Provocation[]> => {
-  // Use a targeted slice of the dataset to provide context
-  const dataSummary = JSON.stringify(data.slice(0, 15).map(r => ({
+  const sample = getDistributedSample(data, 18);
+  const dataSummary = JSON.stringify(sample.map(r => ({
     title: r.title,
     date: r.date,
     category: r.category,
-    desc: r.description?.slice(0, 80)
+    desc: r.description?.slice(0, 100)
   })));
   
   const systemPrompt = `
-You are an archival studies consultant helping a researcher interrogate their dataset critically.
+You are an archival studies consultant looking at 18 sample records from a set of ${data.length}.
 
-Dataset fragment (${data.length} total records, showing first 15):
+DATA SAMPLE:
 ${dataSummary}
 
-Generate 3 provocations that help the researcher read WITH, AGAINST, and ACROSS the grain of this archive.
+Generate 3 provocations (WITH, AGAINST, and ACROSS the grain).
 
-For each provocation, consider:
-- WITH THE GRAIN: What logic or worldview organized this collection? What did the creators think was worth preserving and why?
-- AGAINST THE GRAIN: What absences, silences, or marginalizations does the structure reveal? Whose labor, voices, or experiences are rendered invisible?
-- ACROSS THE GRAIN: What unexpected patterns, juxtapositions, or tensions emerge when records are read relationally rather than individually?
-
-Focus on:
-- Categorical violence (how naming/grouping flattens complexity)
-- Temporal clustering (what events or periods are over/underrepresented)
-- Descriptive asymmetries (whose stories get detail vs. summary treatment)
-- Metadata as evidence (what do dates, categories, and absences reveal about the archive's creation context)
+CRITICAL INSTRUCTIONS:
+1. DO NOT fixate on chronological gaps or "silences in dates" or id numbers unless extreme. Assume gaps are simply not in this sample.
+2. FOCUS ON "Substantive Silences" in the "description" field: What types of people or emotions are missing from the descriptions? 
+3. FOCUS ON CATEGORIZATION: How do "category" labels flatten complex items? 
+4. FOCUS ON LANGUAGE: Look for passive voice or colonial terminology.
 
 Return ONLY a JSON array:
 [
-  {"type": "silence", "observation": "specific observation", "context": "why this matters for interpretation"},
-  {"type": "elision", "observation": "specific observation", "context": "what questions this raises"},
-  {"type": "pattern", "observation": "specific observation", "context": "how this reframes the collection"}
-]
-
-Be specific. Name concrete categories, date ranges, or descriptive patterns from the data. Avoid generic observations that could apply to any archive.
-`;
+  {"type": "logic", "observation": "...", "context": "..."},
+  {"type": "silence", "observation": "...", "context": "..."},
+  {"type": "pattern", "observation": "...", "context": "..."}
+]`;
 
   try {
     const response = await fetch("http://localhost:11434/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "qwen3", 
+        model: "deepseek-r1:8b", 
         prompt: systemPrompt,
         stream: false,
-        format: "json", // Instructs Ollama to force JSON mode
-        options: {
-          temperature: 0.6,
-          num_ctx: 4096
-        }
+        format: "json", // Forces Ollama to try to wrap response in JSON
+        options: { temperature: 0.6, num_ctx: 4096 }
       })
     });
 
-    if (!response.ok) {
-      throw new Error(`Ollama responded with status: ${response.status}`);
-    }
+    if (!response.ok) throw new Error("Ollama Offline");
 
     const result = await response.json();
-    let rawContent = result.response;
-    console.log("Raw Ollama response:", rawContent); 
+    let rawContent = result.response.trim();
 
-    // Handle string responses that might contain markdown or extra whitespace
-    if (typeof rawContent === 'string') {
-      rawContent = rawContent.trim();
-      // Remove markdown code blocks if present
-      rawContent = rawContent.replace(/^```json\s*/, '').replace(/```$/, '');
-      
-      try {
-        const parsed = JSON.parse(rawContent);
-        // Ensure we return an array
-        return Array.isArray(parsed) ? parsed : [parsed];
-      } catch (e) {
-        console.error("Failed to parse Ollama JSON string:", rawContent);
-        // Fallback to regex-based extraction
-        const match = rawContent.match(/\[\s*\{.*\}\s*\]/s);
-        if (match) return JSON.parse(match[0]);
-        throw new Error("Invalid JSON structure in model response");
-      }
+    // --- NEW ROBUST CLEANING LAYER ---
+    // 1. Remove the <think> block entirely
+    rawContent = rawContent.replace(/<think>[\s\S]*?<\/think>/g, '');
+
+    // 2. Find the first '[' and last ']' to ignore any text the model put outside the JSON
+    const startBracket = rawContent.indexOf('[');
+    const endBracket = rawContent.lastIndexOf(']');
+    
+    if (startBracket !== -1 && endBracket !== -1) {
+      rawContent = rawContent.substring(startBracket, endBracket + 1);
     }
 
-    return Array.isArray(rawContent) ? rawContent : [];
+    try {
+      const parsed = JSON.parse(rawContent);
+      return Array.isArray(parsed) ? parsed : (parsed.provocations || [parsed]);
+    } catch (parseError) {
+      console.warn("Parsing failed, raw content was:", rawContent);
+      throw new Error("JSON malformed");
+    }
+
   } catch (error) {
-    console.error("Ollama Service Error:", error);
-    // Return a structured error provocation so the UI can display the issue
+    console.error("Service Error:", error);
     return [{
       type: 'surprise',
-      observation: "Local AI connection failed or returned invalid data.",
-      context: "Ensure Ollama is running (OLLAMA_ORIGINS='*' ollama serve) and 'qwen3' is pulled. If you want to use a different model, modify the ollamaService.ts file to point to the desired model. Check browser console for detailed fetch errors."
+      observation: "The AI is thinking too deeply to respond clearly.",
+      context: "Try 'Re-probing' again. This happens when the reasoning model includes too much internal commentary for the parser to handle."
     }];
   }
 };
