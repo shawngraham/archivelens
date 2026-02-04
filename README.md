@@ -29,6 +29,7 @@ ie, `$ ollam run phi4` will go get that model, and open up a chat at the command
 `$ OLLAMA_ORIGINS="*" ollama serve` to start up the server again so that your browser can connect to it.
 
 and make sure to change the 'model' variable in ollamaService.ts to use the model you want.
+<img width="842" height="824" alt="Screenshot 2026-02-04 at 1 18 14 PM" src="https://github.com/user-attachments/assets/fe02e6ae-ca22-482d-a25c-037618de3a08" />
 
 ![action-shot2](action_shot2.png)
 
