@@ -22,9 +22,9 @@ const ProvocationsPanel: React.FC<Props> = ({ records, onUpdateProvocations }) =
     try {
       const res = await getVectorProvocations(records);
       
-      // Filter out empty or broken provocations
-      const validProvs = res.filter(p => p.observation && p.context);
+      const dataArray = Array.isArray(res) ? res : [];
       
+      const validProvs = dataArray.filter(p => p && typeof p === 'object' && p.observation);
       setProvocations(validProvs);
       if (onUpdateProvocations) {
         onUpdateProvocations(validProvs);
